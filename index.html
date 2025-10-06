@@ -3,10 +3,195 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Electiva 1 – CI con GitHub Actions y Surge</title>
+  <title>Calendario — Simple</title>
+  <style>
+    :root{
+      /* Cambia el color del tema aquí */
+      --brand:#4f46e5;   /* Ej.: índigo */
+      --brand-weak:#eef2ff;
+      --text:#111827;
+      --muted:#6b7280;
+      --bg:#fafafa;
+      --card:#ffffff;
+      --radius:16px;
+      --shadow: 0 8px 24px rgba(0,0,0,.06);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; font-family:system-ui,Segoe UI,Roboto,Inter,Arial,sans-serif;
+      color:var(--text); background:var(--bg);
+    }
+    .wrap{
+      max-width:960px; margin:32px auto; padding:0 16px;
+    }
+    header{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:12px; margin-bottom:16px;
+    }
+    .title{
+      display:flex; align-items:center; gap:12px;
+    }
+    .badge{
+      width:40px; height:40px; border-radius:999px;
+      display:grid; place-items:center; color:#fff; font-weight:700;
+      background:var(--brand); box-shadow:var(--shadow);
+    }
+    h1{font-size:clamp(20px,3vw,28px); margin:0}
+    .controls{display:flex; gap:8px; align-items:center}
+    button{
+      border:1px solid #e5e7eb; background:#fff; padding:8px 10px;
+      border-radius:12px; cursor:pointer; transition:.15s; font-weight:600;
+    }
+    button:hover{transform:translateY(-1px)}
+    .today-btn{background:var(--brand); color:#fff; border-color:transparent}
+
+    .calendar{
+      background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow);
+      padding:16px;
+    }
+    .monthbar{
+      display:flex; align-items:center; justify-content:space-between; margin:4px 0 12px;
+    }
+    .monthbar .nav{display:flex; gap:8px}
+    .nav button{width:40px; height:40px; padding:0; font-size:18px}
+    .label{
+      font-weight:800; letter-spacing:.3px;
+    }
+
+    .grid{
+      display:grid; grid-template-columns:repeat(7,1fr); gap:6px;
+    }
+    .dow{
+      text-align:center; font-size:.85rem; color:var(--muted); font-weight:700; padding:8px 0;
+    }
+    .cell{
+      min-height:84px; background:linear-gradient(#fff,#fff) padding-box,
+                       linear-gradient(135deg, transparent, transparent) border-box;
+      border:1px solid #eef0f4; border-radius:12px; padding:8px; position:relative;
+      display:flex; align-items:flex-start; justify-content:flex-end; font-weight:700;
+    }
+    .cell.muted{color:#9aa0a6; background:#fcfcfd}
+    .cell.today{
+      outline:2px solid var(--brand); outline-offset:0; background:var(--brand-weak);
+    }
+    .cell .num{font-variant-numeric:tabular-nums}
+    footer{
+      display:flex; justify-content:space-between; align-items:center;
+      color:var(--muted); margin-top:12px; font-size:.9rem;
+    }
+
+    /* Responsive */
+    @media (max-width:640px){
+      .cell{min-height:64px}
+      .dow{font-size:.8rem}
+    }
+  </style>
 </head>
 <body>
-  <h1>¡Hola, mundo! 🚀</h1>
-  <p>Despliegue automático a Surge al hacer <code>push</code> en <b>main</b>.</p>
+  <div class="wrap">
+    <header>
+      <div class="title">
+        <div class="badge">C</div>
+        <h1>Calendario</h1>
+      </div>
+      <div class="controls">
+        <button id="btn-today" class="today-btn">Hoy</button>
+      </div>
+    </header>
+
+    <section class="calendar">
+      <div class="monthbar">
+        <div class="nav">
+          <button id="prev" aria-label="Mes anterior">◀</button>
+          <button id="next" aria-label="Mes siguiente">▶</button>
+        </div>
+        <div class="label" id="month-label">octubre 2025</div>
+      </div>
+
+      <div class="grid" id="grid-head"></div>
+      <div class="grid" id="grid-body" aria-live="polite"></div>
+
+      <footer>
+        <span id="info"></span>
+      </footer>
+    </section>
+  </div>
+
+  <script>
+    // --- Utilidades ---
+    const NAMES_MONTH = [
+      "enero","febrero","marzo","abril","mayo","junio",
+      "julio","agosto","septiembre","octubre","noviembre","diciembre"
+    ];
+    // Días empezando en Lunes
+    const DOW = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+
+    const head = document.getElementById('grid-head');
+    const body = document.getElementById('grid-body');
+    const label = document.getElementById('month-label');
+    const info = document.getElementById('info');
+
+    // Render encabezado de días
+    head.innerHTML = DOW.map(d => `<div class="dow">${d}</div>`).join("");
+
+    let viewDate = new Date(); // fecha que se está mostrando
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    function startOfMonth(date){
+      const d = new Date(date.getFullYear(), date.getMonth(), 1);
+      // pasar lunes como primer día (0 → lunes)
+      let day = d.getDay(); // 0 dom, 1 lun, ...
+      day = (day === 0) ? 7 : day; // domingo como 7
+      d.setDate(d.getDate() - (day - 1));
+      return d;
+    }
+
+    function sameDay(a,b){
+      return a.getFullYear()===b.getFullYear() &&
+             a.getMonth()===b.getMonth() &&
+             a.getDate()===b.getDate();
+    }
+
+    function render(){
+      const first = startOfMonth(viewDate);
+      const currentMonth = viewDate.getMonth();
+      label.textContent = `${NAMES_MONTH[currentMonth]} ${viewDate.getFullYear()}`;
+
+      // 6 semanas * 7 días = 42 celdas para vista consistente
+      const cells = [];
+      const d = new Date(first);
+      for(let i=0;i<42;i++){
+        const isMuted = d.getMonth() !== currentMonth;
+        const isToday = sameDay(d, today);
+        cells.push(`
+          <div class="cell ${isMuted ? 'muted':''} ${isToday ? 'today':''}">
+            <span class="num">${d.getDate()}</span>
+          </div>
+        `);
+        d.setDate(d.getDate()+1);
+      }
+      body.innerHTML = cells.join("");
+      info.textContent = `Mostrando ${NAMES_MONTH[currentMonth]} ${viewDate.getFullYear()}`;
+    }
+
+    // Navegación
+    document.getElementById('prev').onclick = () => {
+      viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth()-1, 1);
+      render();
+      window.scrollTo({top:0,behavior:"smooth"});
+    };
+    document.getElementById('next').onclick = () => {
+      viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 1);
+      render();
+      window.scrollTo({top:0,behavior:"smooth"});
+    };
+    document.getElementById('btn-today').onclick = () => {
+      viewDate = new Date();
+      render();
+    };
+
+    render();
+  </script>
 </body>
 </html>
