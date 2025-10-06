@@ -14,24 +14,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Instalar Node (para usar Surge CLI)
+      - name: Instalar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Instalar Surge CLI
-        run: npm i -g surge
+        run: npm install -g surge
 
-      # Si tu sitio está en la raíz del repo, el "project" es "."
-      # Para dominio, usa una variable de repositorio SURGE_DOMAIN (recomendado)
-      - name: Deploy a Surge
+      - name: Desplegar a Surge
         env:
           SURGE_TOKEN: ${{ secrets.SURGE_TOKEN }}
-          SURGE_DOMAIN: ${{ vars.SURGE_DOMAIN }}
-        run: |
-          if [ -z "$SURGE_DOMAIN" ]; then
-            echo "No hay vars.SURGE_DOMAIN; se usará un dominio temporal."
-            surge ./ --token "$SURGE_TOKEN"
-          else
-            surge ./ "$SURGE_DOMAIN" --token "$SURGE_TOKEN"
-          fi
+        run: surge ./ ledesma.surge.sh --token "$SURGE_TOKEN"
+
